@@ -1,6 +1,4 @@
-const DEFAULT_SETTINGS = {
-  voiceMode: "auto",
-  selectedVoiceName: "auto",
+﻿const DEFAULT_SETTINGS = {
   speechRate: 1.0
 };
 
@@ -10,23 +8,22 @@ const UNKNOWN_LANGUAGE = {
 };
 
 const elements = {
-  voiceMode: document.getElementById("voiceMode"),
-  voiceSelect: document.getElementById("voiceSelect"),
   selectedVoiceText: document.getElementById("selectedVoiceText"),
   previewText: document.getElementById("previewText"),
   previewButton: document.getElementById("previewButton"),
-  detectButton: document.getElementById("detectButton"),
   stopButton: document.getElementById("stopButton"),
   speakButton: document.getElementById("speakButton"),
   speedSlider: document.getElementById("speedSlider"),
   speedValue: document.getElementById("speedValue"),
   languageText: document.getElementById("languageText"),
+  selectionText: document.getElementById("selectionText"),
   statusText: document.getElementById("statusText")
 };
 
-let availableVoices = [];
 let detectedLanguage = UNKNOWN_LANGUAGE;
 let lastSelectedText = "";
+let popupAudio = null;
+let popupAudioUrl = null;
 
 function setStatus(message) {
   elements.statusText.textContent = message;
@@ -36,105 +33,26 @@ function updateSpeedText(rate) {
   elements.speedValue.textContent = `${Number(rate).toFixed(1)}x`;
 }
 
-function getDisplayedVoices() {
-  const languageVoices = SelectSpeak.getLanguageVoiceMatches(
-    availableVoices,
-    detectedLanguage.code
-  );
-
-  if (detectedLanguage.code === "unknown") {
-    return availableVoices;
-  }
-
-  return languageVoices;
-}
-
-function getSelectedVoice() {
-  return availableVoices.find((voice) => {
-    return voice.voiceName === elements.voiceSelect.value;
-  });
-}
-
-function getAutoVoice() {
-  return SelectSpeak.findBestVoice(availableVoices, detectedLanguage.code);
-}
-
 function updatePreviewText() {
   elements.previewText.textContent = SelectSpeak.getPreviewText(detectedLanguage.code);
 }
 
 function updateLanguageText() {
-  if (detectedLanguage.code === "unknown") {
-    elements.languageText.textContent = "None yet";
-    return;
-  }
-
-  elements.languageText.textContent = `${detectedLanguage.name} (${detectedLanguage.code})`;
+  elements.languageText.textContent = detectedLanguage.code === "unknown"
+    ? "Detected when speaking"
+    : `${detectedLanguage.name} (${detectedLanguage.code})`;
 }
 
-function updateSelectedVoiceText() {
-  if (elements.voiceMode.value === "manual" && elements.voiceSelect.value !== "auto") {
-    elements.selectedVoiceText.textContent = SelectSpeak.getVoiceLabel(getSelectedVoice());
-    return;
-  }
-
-  const autoVoice = getAutoVoice();
-  elements.selectedVoiceText.textContent = autoVoice
-    ? SelectSpeak.getVoiceLabel(autoVoice)
-    : "Auto choose best voice";
+function updateSelectionText(text) {
+  const normalizedText = text.trim();
+  lastSelectedText = normalizedText;
+  elements.selectionText.textContent = normalizedText || "Select text on a webpage to read it aloud.";
 }
 
-function addVoiceOption(value, label, disabled = false) {
-  const option = document.createElement("option");
-
-  option.value = value;
-  option.textContent = label;
-  option.disabled = disabled;
-  elements.voiceSelect.appendChild(option);
-}
-
-function populateVoiceOptions(preferredVoiceName = elements.voiceSelect.value) {
-  const voicesToShow = getDisplayedVoices();
-
-  elements.voiceSelect.replaceChildren();
-  addVoiceOption("auto", "Auto choose best voice");
-
-  voicesToShow.forEach((voice) => {
-    addVoiceOption(voice.voiceName, SelectSpeak.getVoiceLabel(voice));
-  });
-
-  if (voicesToShow.length === 0 && detectedLanguage.code !== "unknown") {
-    addVoiceOption("no-match", `No ${detectedLanguage.name} voices installed`, true);
-  }
-
-  const hasPreferredVoice = voicesToShow.some((voice) => {
-    return voice.voiceName === preferredVoiceName;
-  });
-
-  elements.voiceSelect.value = hasPreferredVoice ? preferredVoiceName : "auto";
-  updateSelectedVoiceText();
-}
-
-function updateVoiceSelectState() {
-  const isAutoMode = elements.voiceMode.value === "auto";
-
-  elements.voiceSelect.disabled = isAutoMode;
-
-  if (isAutoMode) {
-    elements.voiceSelect.value = "auto";
-  }
-
-  updateSelectedVoiceText();
-}
-
-function updateDetectedLanguage(language, selectedText) {
-  detectedLanguage = language;
-  lastSelectedText = selectedText;
-
+function updateDetectedLanguage(language) {
+  detectedLanguage = language || UNKNOWN_LANGUAGE;
   updateLanguageText();
   updatePreviewText();
-  populateVoiceOptions();
-  updateVoiceSelectState();
 }
 
 function saveSettings(settings) {
@@ -148,25 +66,13 @@ function restoreSavedSettings(callback) {
       ...savedSettings
     };
 
-    elements.voiceMode.value = settings.voiceMode;
     elements.speedSlider.value = settings.speechRate;
-
-    populateVoiceOptions(settings.selectedVoiceName);
+    elements.selectedVoiceText.textContent = SelectSpeak.getVoiceLabel();
     updateSpeedText(settings.speechRate);
-    updateVoiceSelectState();
     updateLanguageText();
     updatePreviewText();
 
     callback?.();
-  });
-}
-
-function loadVoices() {
-  chrome.tts.getVoices((voices) => {
-    availableVoices = voices;
-    restoreSavedSettings(() => {
-      detectSelectedText({ silentWhenEmpty: true });
-    });
   });
 }
 
@@ -177,113 +83,136 @@ function getCurrentTab() {
   }).then((tabs) => tabs[0]);
 }
 
+function canInjectIntoTab(tab) {
+  return /^https?:\/\//i.test(tab?.url || "");
+}
+
+function isMissingReceiverError(error) {
+  return error?.message?.includes("Receiving end does not exist");
+}
+
+function getBlockedPageMessage(tab) {
+  if (!tab?.url) {
+    return "Cannot inspect this page.";
+  }
+
+  if (!canInjectIntoTab(tab)) {
+    return "Chrome blocks extensions on this page. Try a normal http or https webpage.";
+  }
+
+  return "Cannot inspect this page. Refresh it and try again.";
+}
+
+async function injectContentScripts(tab) {
+  if (!canInjectIntoTab(tab)) {
+    throw new Error(getBlockedPageMessage(tab));
+  }
+
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["shared.js", "content.js"]
+  });
+}
+
+async function sendTabMessage(tab, message) {
+  try {
+    return await chrome.tabs.sendMessage(tab.id, message);
+  } catch (error) {
+    if (!isMissingReceiverError(error)) {
+      throw error;
+    }
+
+    await injectContentScripts(tab);
+    return chrome.tabs.sendMessage(tab.id, message);
+  }
+}
+
 async function getSelectedTextFromPage() {
   const tab = await getCurrentTab();
-  const response = await chrome.tabs.sendMessage(tab.id, {
-    action: "getSelectedText"
+  const response = await sendTabMessage(tab, {
+    action: "GET_SELECTED_TEXT"
   });
 
   return (response?.text || "").trim();
 }
 
-async function detectSelectedText({ silentWhenEmpty = false } = {}) {
+async function refreshSelectedText({ silentWhenEmpty = false } = {}) {
   try {
     const selectedText = await getSelectedTextFromPage();
+    updateSelectionText(selectedText);
 
-    if (!selectedText) {
-      updateDetectedLanguage(UNKNOWN_LANGUAGE, "");
-
-      if (!silentWhenEmpty) {
-        setStatus("Please select text on the page first.");
-      }
-
-      return "";
+    if (!selectedText && !silentWhenEmpty) {
+      setStatus("Please select text on the page first.");
     }
-
-    const language = SelectSpeak.detectLanguage(selectedText);
-    const matchingVoices = SelectSpeak.getLanguageVoiceMatches(availableVoices, language.code);
-
-    updateDetectedLanguage(language, selectedText);
-    setStatus(`Detected ${language.name}. Showing ${matchingVoices.length} matching voice${matchingVoices.length === 1 ? "" : "s"}.`);
 
     return selectedText;
   } catch (error) {
     console.error(error);
+    updateSelectionText("");
 
     if (!silentWhenEmpty) {
-      setStatus("Cannot inspect this page. Refresh the page and try again.");
+      setStatus(error.message || "Cannot inspect this page.");
     }
 
     return "";
   }
 }
 
-function getConfiguredVoiceName() {
-  if (elements.voiceMode.value === "manual" && elements.voiceSelect.value !== "auto") {
-    updateSelectedVoiceText();
+async function detectLanguageForText(text) {
+  setStatus("Detecting language...");
+  const language = await SelectSpeak.analyzeText(text);
+  updateDetectedLanguage(language);
+  setStatus(`Detected ${language.name}. Preparing speech...`);
 
-    return {
-      voiceName: elements.voiceSelect.value,
-      status: "Reading with manually selected voice."
-    };
-  }
+  return language;
+}
 
-  const bestVoice = getAutoVoice();
-
-  if (!bestVoice) {
-    elements.selectedVoiceText.textContent = "No matching voice found";
-
-    return {
-      voiceName: undefined,
-      status: "No matching voice found. Using default voice."
-    };
-  }
-
-  elements.selectedVoiceText.textContent = SelectSpeak.getVoiceLabel(bestVoice);
-
+function getSpeechPreferences() {
   return {
-    voiceName: bestVoice.voiceName,
-    status: "Reading with auto-detected voice."
+    provider: "elevenlabs",
+    rate: Number(elements.speedSlider.value)
   };
 }
 
-function getPreviewVoiceName() {
-  if (elements.voiceMode.value === "manual" && elements.voiceSelect.value !== "auto") {
-    return elements.voiceSelect.value;
+function stopPopupAudio() {
+  if (popupAudio) {
+    popupAudio.pause();
+    popupAudio.removeAttribute("src");
+    popupAudio.load();
+    popupAudio = null;
   }
 
-  return getAutoVoice()?.voiceName;
-}
-
-function speak(text, voiceName, rate) {
-  chrome.tts.stop();
-  chrome.tts.speak(text, SelectSpeak.getSpeechOptions({ rate, voiceName }));
-}
-
-elements.voiceMode.addEventListener("change", () => {
-  const selectedMode = elements.voiceMode.value;
-  const settings = {
-    voiceMode: selectedMode
-  };
-
-  if (selectedMode === "auto") {
-    settings.selectedVoiceName = "auto";
-    elements.voiceSelect.value = "auto";
+  if (popupAudioUrl) {
+    URL.revokeObjectURL(popupAudioUrl);
+    popupAudioUrl = null;
   }
+}
 
-  saveSettings(settings);
-  updateVoiceSelectState();
-  setStatus(`Voice mode set to ${selectedMode}.`);
-});
+async function playInPopup(text, preferences) {
+  stopPopupAudio();
 
-elements.voiceSelect.addEventListener("change", () => {
-  saveSettings({
-    selectedVoiceName: elements.voiceSelect.value
+  const audioBlob = await SelectSpeak.fetchSpeech(text, preferences);
+  popupAudioUrl = URL.createObjectURL(audioBlob);
+  popupAudio = new Audio(popupAudioUrl);
+  popupAudio.playbackRate = preferences.rate || 1;
+  popupAudio.addEventListener("ended", stopPopupAudio, { once: true });
+  popupAudio.addEventListener("error", stopPopupAudio, { once: true });
+
+  await popupAudio.play();
+}
+
+async function playInPage(text, preferences) {
+  const tab = await getCurrentTab();
+  const response = await sendTabMessage(tab, {
+    action: "PLAY_TEXT",
+    text,
+    preferences
   });
 
-  updateSelectedVoiceText();
-  setStatus("Selected voice saved.");
-});
+  if (!response?.success) {
+    throw new Error(response?.message || "Page playback failed.");
+  }
+}
 
 elements.speedSlider.addEventListener("input", () => {
   const selectedRate = Number(elements.speedSlider.value);
@@ -295,36 +224,56 @@ elements.speedSlider.addEventListener("input", () => {
   setStatus(`Speed set to ${selectedRate.toFixed(1)}x.`);
 });
 
-elements.detectButton.addEventListener("click", () => {
-  detectSelectedText();
+elements.previewButton.addEventListener("click", async () => {
+  try {
+    const selectedText = await refreshSelectedText({ silentWhenEmpty: true });
+
+    if (selectedText) {
+      await detectLanguageForText(selectedText);
+    }
+
+    const previewText = SelectSpeak.getPreviewText(detectedLanguage.code);
+
+    setStatus("Generating preview...");
+    await playInPopup(previewText, getSpeechPreferences());
+    setStatus("Previewing configured voice.");
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message || "Preview failed.");
+  }
 });
 
-elements.previewButton.addEventListener("click", () => {
-  const selectedRate = Number(elements.speedSlider.value);
-  const selectedVoiceName = getPreviewVoiceName();
-  const previewText = SelectSpeak.getPreviewText(detectedLanguage.code);
+elements.stopButton.addEventListener("click", async () => {
+  stopPopupAudio();
 
-  speak(previewText, selectedVoiceName, selectedRate);
-  setStatus(selectedVoiceName ? "Previewing detected-language voice." : "Previewing default voice.");
-});
+  try {
+    const tab = await getCurrentTab();
+    await sendTabMessage(tab, { action: "STOP_AUDIO" });
+  } catch {
+    // The active page may not have the content script; popup audio is still stopped.
+  }
 
-elements.stopButton.addEventListener("click", () => {
-  chrome.tts.stop();
   setStatus("Stopped.");
 });
 
 elements.speakButton.addEventListener("click", async () => {
-  const selectedText = await detectSelectedText();
+  const selectedText = await refreshSelectedText();
 
   if (!selectedText) {
     return;
   }
 
-  const selectedRate = Number(elements.speedSlider.value);
-  const selectedVoice = getConfiguredVoiceName();
+  try {
+    const language = await detectLanguageForText(selectedText);
 
-  speak(lastSelectedText, selectedVoice.voiceName, selectedRate);
-  setStatus(selectedVoice.status);
+    await playInPage(selectedText, getSpeechPreferences());
+    setStatus(`Reading ${language.name} with word tracking.`);
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message || "Speech playback failed.");
+  }
 });
 
-loadVoices();
+restoreSavedSettings(() => {
+  refreshSelectedText({ silentWhenEmpty: true });
+});

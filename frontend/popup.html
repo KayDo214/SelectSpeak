@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
   <title>SelectSpeak</title>
@@ -10,33 +10,22 @@
     <div class="header">
       <div>
         <h1>SelectSpeak</h1>
-        <p class="subtitle">Read selected text with smart voice control</p>
+        <p class="subtitle">Read selected text with one configured voice</p>
       </div>
     </div>
 
     <div class="main-panel">
       <div class="left-panel">
+        <h2>Selected Text</h2>
+
+        <div class="selection-card">
+          <p id="selectionText">Select text on a webpage to read it aloud.</p>
+        </div>
+
         <p class="info-line">
-          <span class="label">Detected Language</span>
-          <span id="languageText" class="value-pill">None yet</span>
+          <span class="label">Language</span>
+          <span id="languageText" class="value-pill">Detected when speaking</span>
         </p>
-
-        <button id="detectButton" class="secondary-button full-width-button detect-button">Detect Selected Text</button>
-
-        <div class="setting-group">
-          <label for="voiceMode">Voice Mode</label>
-          <select id="voiceMode">
-            <option value="auto">Auto Detect</option>
-            <option value="manual">Manual Voice</option>
-          </select>
-        </div>
-
-        <div class="setting-group">
-          <label for="voiceSelect">Voice Options</label>
-          <select id="voiceSelect">
-            <option value="auto">Auto choose best voice</option>
-          </select>
-        </div>
       </div>
 
       <div class="divider"></div>
@@ -46,7 +35,7 @@
 
         <div class="preview-card">
           <p class="small-label">Selected Voice</p>
-          <p id="selectedVoiceText">Auto choose best voice</p>
+          <p id="selectedVoiceText">Configured ElevenLabs voice</p>
 
           <p class="small-label">Preview Text</p>
           <p id="previewText">Hello, this is a short voice preview.</p>

@@ -1,180 +1,103 @@
 (function () {
+  const BACKEND_BASE_URL = "http://localhost:3000";
+
   const PREVIEW_TEXT_BY_LANGUAGE = {
-    ar: "مرحبا، هذه معاينة للصوت.",
+    ar: "\u0645\u0631\u062d\u0628\u0627\u060c \u0647\u0630\u0647 \u0645\u0639\u0627\u064a\u0646\u0629 \u0644\u0644\u0635\u0648\u062a.",
     de: "Hallo, dies ist eine kurze Stimmvorschau.",
-    el: "Γεια σας, αυτή είναι μια σύντομη προεπισκόπηση φωνής.",
+    el: "\u0393\u03b5\u03b9\u03b1 \u03c3\u03b1\u03c2, \u03b1\u03c5\u03c4\u03ae \u03b5\u03af\u03bd\u03b1\u03b9 \u03bc\u03b9\u03b1 \u03c3\u03cd\u03bd\u03c4\u03bf\u03bc\u03b7 \u03c0\u03c1\u03bf\u03b5\u03c0\u03b9\u03c3\u03ba\u03cc\u03c0\u03b7\u03c3\u03b7 \u03c6\u03c9\u03bd\u03ae\u03c2.",
     en: "Hello, this is a short voice preview.",
     es: "Hola, esta es una breve prueba de voz.",
-    fr: "Bonjour, voici un court aperçu de la voix.",
-    he: "שלום, זו תצוגה מקדימה קצרה של הקול.",
-    hi: "नमस्ते, यह आवाज़ का छोटा पूर्वावलोकन है।",
-    it: "Ciao, questa è una breve anteprima della voce.",
-    ja: "こんにちは。これは短い音声プレビューです。",
-    ko: "안녕하세요. 짧은 음성 미리듣기입니다.",
-    pt: "Olá, esta é uma breve prévia da voz.",
-    ru: "Здравствуйте, это короткий пример голоса.",
-    th: "สวัสดี นี่คือตัวอย่างเสียงสั้น ๆ",
-    vi: "Xin chào, đây là bản nghe thử giọng nói ngắn.",
-    zh: "你好，这是一个简短的语音预览。"
+    fr: "Bonjour, voici un court apercu de la voix.",
+    he: "\u05e9\u05dc\u05d5\u05dd, \u05d6\u05d5 \u05ea\u05e6\u05d5\u05d2\u05d4 \u05de\u05e7\u05d3\u05d9\u05de\u05d4 \u05e7\u05e6\u05e8\u05d4 \u05e9\u05dc \u05d4\u05e7\u05d5\u05dc.",
+    hi: "\u0928\u092e\u0938\u094d\u0924\u0947, \u092f\u0939 \u0906\u0935\u093e\u091c \u0915\u093e \u091b\u094b\u091f\u093e \u092a\u0942\u0930\u094d\u0935\u093e\u0935\u0932\u094b\u0915\u0928 \u0939\u0948.",
+    it: "Ciao, questa e una breve anteprima della voce.",
+    ja: "\u3053\u3093\u306b\u3061\u306f\u3002\u3053\u308c\u306f\u77ed\u3044\u97f3\u58f0\u30d7\u30ec\u30d3\u30e5\u30fc\u3067\u3059\u3002",
+    ko: "\uc548\ub155\ud558\uc138\uc694. \uc9e7\uc740 \uc74c\uc131 \ubbf8\ub9ac\ub4e3\uae30\uc785\ub2c8\ub2e4.",
+    pt: "Ola, esta e uma breve previa da voz.",
+    ru: "\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435, \u044d\u0442\u043e \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0439 \u043f\u0440\u0438\u043c\u0435\u0440 \u0433\u043e\u043b\u043e\u0441\u0430.",
+    th: "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35 \u0e19\u0e35\u0e48\u0e04\u0e37\u0e2d\u0e15\u0e31\u0e27\u0e2d\u0e22\u0e48\u0e32\u0e07\u0e40\u0e2a\u0e35\u0e22\u0e07\u0e2a\u0e31\u0e49\u0e19.",
+    vi: "Xin chao, day la ban nghe thu giong noi ngan.",
+    zh: "\u4f60\u597d\uff0c\u8fd9\u662f\u4e00\u4e2a\u7b80\u77ed\u7684\u8bed\u97f3\u9884\u89c8\u3002"
   };
 
-  const LATIN_LANGUAGE_RULES = [
-    {
-      code: "es",
-      name: "Spanish",
-      pattern: /[ñ¿¡]|(?:\b(?:el|la|los|las|un|una|unos|unas|que|de|del|con|para|por|como|este|esta|esto|hola|gracias|usted|yo|tú|pero|porque|es|son|está|están)\b)/gi
-    },
-    {
-      code: "fr",
-      name: "French",
-      pattern: /[œç]|(?:\b(?:le|la|les|des|une|avec|pour|vous|nous|est|sont|bonjour|merci|mais|parce|dans|être|cette|cela)\b)/gi
-    },
-    {
-      code: "de",
-      name: "German",
-      pattern: /[äöüß]|(?:\b(?:der|die|das|und|nicht|mit|für|ist|sind|ich|sie|wir|aber|weil|hallo|danke|diese|dieser)\b)/gi
-    },
-    {
-      code: "it",
-      name: "Italian",
-      pattern: /(?:\b(?:il|lo|la|gli|le|un|una|che|di|con|per|come|ciao|grazie|sono|questa|questo|perché|ma|noi|voi)\b)/gi
-    },
-    {
-      code: "pt",
-      name: "Portuguese",
-      pattern: /[ãõç]|(?:\b(?:um|uma|que|com|para|por|como|olá|obrigado|você|está|estão|este|esta|porque|mas)\b)/gi
-    }
+  const BACKEND_VOICES = [
+    { voiceName: "configured", lang: "ElevenLabs" }
   ];
 
-  const LANGUAGE_RULES = [
-    {
-      code: "vi",
-      name: "Vietnamese",
-      pattern: /[\u0103\u00e2\u0111\u00ea\u00f4\u01a1\u01b0]/i
-    },
-    { code: "ko", name: "Korean", pattern: /[\uac00-\ud7af]/ },
-    { code: "ja", name: "Japanese", pattern: /[\u3040-\u30ff]/ },
-    { code: "zh", name: "Chinese", pattern: /[\u4e00-\u9fff]/ },
-    { code: "ar", name: "Arabic", pattern: /[\u0600-\u06ff]/ },
-    { code: "he", name: "Hebrew", pattern: /[\u0590-\u05ff]/ },
-    { code: "th", name: "Thai", pattern: /[\u0e00-\u0e7f]/ },
-    { code: "ru", name: "Cyrillic language", pattern: /[\u0400-\u04ff]/ },
-    { code: "el", name: "Greek", pattern: /[\u0370-\u03ff]/ },
-    { code: "hi", name: "Hindi / Devanagari", pattern: /[\u0900-\u097f]/ }
-  ];
-
-  function detectLanguage(text) {
-    const sample = text.trim();
-
-    if (!sample) {
-      return {
-        code: "unknown",
-        name: "Unknown"
-      };
-    }
-
-    const matchedLanguage = LANGUAGE_RULES.find((language) => {
-      return language.pattern.test(sample);
-    });
-
-    if (matchedLanguage) {
-      return {
-        code: matchedLanguage.code,
-        name: matchedLanguage.name
-      };
-    }
-
-    const latinMatch = getBestLatinLanguageMatch(sample);
-
-    if (latinMatch) {
-      return latinMatch;
-    }
-
-    return {
-      code: "en",
-      name: "English / Latin text"
-    };
-  }
-
-  function getBestLatinLanguageMatch(sample) {
-    const lowerSample = sample.toLowerCase();
-    let bestMatch = null;
-
-    LATIN_LANGUAGE_RULES.forEach((language) => {
-      const matches = lowerSample.match(language.pattern);
-      const score = matches ? matches.length : 0;
-
-      if (score > 0 && (!bestMatch || score > bestMatch.score)) {
-        bestMatch = {
-          code: language.code,
-          name: language.name,
-          score
-        };
-      }
-    });
-
-    if (!bestMatch) {
-      return null;
-    }
-
-    return {
-      code: bestMatch.code,
-      name: bestMatch.name
-    };
-  }
-
-  function getLanguageVoiceMatches(voices, languageCode) {
-    if (!languageCode || languageCode === "unknown") {
-      return [];
-    }
-
-    const lowerCode = languageCode.toLowerCase();
-
-    return voices.filter((voice) => {
-      const voiceLang = (voice.lang || "").toLowerCase();
-
-      return voiceLang === lowerCode || voiceLang.startsWith(`${lowerCode}-`);
-    });
-  }
-
-  function findBestVoice(voices, languageCode) {
-    const directMatches = getLanguageVoiceMatches(voices, languageCode);
-
-    if (directMatches.length > 0) {
-      return directMatches[0];
-    }
-
-    return null;
-  }
+  const VOICE_BY_LANGUAGE = {
+    default: "configured"
+  };
 
   function getPreviewText(languageCode) {
     return PREVIEW_TEXT_BY_LANGUAGE[languageCode] || PREVIEW_TEXT_BY_LANGUAGE.en;
   }
 
-  function getVoiceLabel(voice) {
-    return voice ? `${voice.voiceName} (${voice.lang})` : "Auto choose best voice";
+  function findBestVoice(voices, languageCode) {
+    const voiceName = VOICE_BY_LANGUAGE[languageCode] || VOICE_BY_LANGUAGE.en;
+
+    return voices.find((voice) => voice.voiceName === voiceName) || voices[0] || null;
   }
 
-  function getSpeechOptions({ rate, voiceName }) {
-    const options = {
-      rate,
-      pitch: 1.0,
-      volume: 1.0
-    };
+  function getLanguageVoiceMatches(voices) {
+    return voices;
+  }
 
-    if (voiceName) {
-      options.voiceName = voiceName;
+  function getVoiceLabel(voice) {
+    return voice ? `Configured ${voice.lang} voice` : "Configured ElevenLabs voice";
+  }
+
+  async function readErrorMessage(response) {
+    try {
+      const body = await response.json();
+
+      return body.message || `Request failed with ${response.status}`;
+    } catch {
+      return `Request failed with ${response.status}`;
+    }
+  }
+
+  async function analyzeText(text) {
+    const response = await fetch(`${BACKEND_BASE_URL}/api/analyze`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
     }
 
-    return options;
+    const result = await response.json();
+
+    return result.language;
+  }
+
+  async function fetchSpeech(text, preferences = {}) {
+    const response = await fetch(`${BACKEND_BASE_URL}/api/tts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text, preferences })
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    return response.blob();
   }
 
   globalThis.SelectSpeak = {
-    detectLanguage,
+    BACKEND_BASE_URL,
+    BACKEND_VOICES,
+    analyzeText,
+    fetchSpeech,
     findBestVoice,
     getLanguageVoiceMatches,
     getPreviewText,
-    getSpeechOptions,
     getVoiceLabel
   };
 })();

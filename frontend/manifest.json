@@ -2,12 +2,15 @@
   "manifest_version": 3,
   "name": "SelectSpeak",
   "version": "1.0",
-  "description": "Read selected webpage text aloud.",
+  "description": "Read selected webpage text aloud through a secure backend.",
   "permissions": [
-    "tts",
     "contextMenus",
     "storage",
-    "activeTab"
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*"
   ],
   "background": {
     "service_worker": "service-worker.js"
@@ -15,7 +18,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["shared.js", "content.js"]
     }
   ],
   "action": {

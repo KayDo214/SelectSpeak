@@ -1,12 +1,4 @@
-importScripts("shared.js");
-
-let availableVoices = [];
-
-function loadVoices() {
-  chrome.tts.getVoices((voices) => {
-    availableVoices = voices;
-  });
-}
+﻿importScripts("shared.js");
 
 function createContextMenu() {
   chrome.contextMenus.create({
@@ -17,56 +9,72 @@ function createContextMenu() {
 }
 
 function getSettings(callback) {
-  chrome.storage.sync.get(
-    ["voiceMode", "selectedVoiceName", "speechRate"],
-    (settings) => {
-      callback({
-        voiceMode: settings.voiceMode || "auto",
-        selectedVoiceName: settings.selectedVoiceName || "auto",
-        speechRate: settings.speechRate || 1.0
-      });
-    }
-  );
+  chrome.storage.sync.get(["speechRate"], (settings) => {
+    callback({
+      speechRate: settings.speechRate || 1.0
+    });
+  });
 }
 
-function getVoiceName(text, settings) {
-  if (settings.voiceMode === "manual" && settings.selectedVoiceName !== "auto") {
-    return settings.selectedVoiceName;
+function getPreferences(settings) {
+  return {
+    provider: "elevenlabs",
+    rate: settings.speechRate
+  };
+}
+
+function canInjectIntoTab(tab) {
+  return /^https?:\/\//i.test(tab?.url || "");
+}
+
+function isMissingReceiverError(error) {
+  return error?.message?.includes("Receiving end does not exist");
+}
+
+async function injectContentScripts(tab) {
+  if (!canInjectIntoTab(tab)) {
+    throw new Error("Chrome blocks extensions on this page.");
   }
 
-  const detectedLanguage = SelectSpeak.detectLanguage(text);
-  const bestVoice = SelectSpeak.findBestVoice(availableVoices, detectedLanguage.code);
-
-  return bestVoice?.voiceName;
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["shared.js", "content.js"]
+  });
 }
 
-function speakSelectedText(selectedText) {
-  getSettings((settings) => {
-    const voiceName = getVoiceName(selectedText, settings);
+async function sendTabMessage(tab, message) {
+  try {
+    return await chrome.tabs.sendMessage(tab.id, message);
+  } catch (error) {
+    if (!isMissingReceiverError(error)) {
+      throw error;
+    }
 
-    chrome.tts.stop();
-    chrome.tts.speak(
-      selectedText,
-      SelectSpeak.getSpeechOptions({
-        voiceName,
-        rate: settings.speechRate
-      })
-    );
-  });
+    await injectContentScripts(tab);
+    return chrome.tabs.sendMessage(tab.id, message);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(createContextMenu);
 
-chrome.contextMenus.onClicked.addListener((info) => {
-  if (info.menuItemId !== "read-selected-text") {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== "read-selected-text" || !tab?.id) {
     return;
   }
 
   const selectedText = (info.selectionText || "").trim();
 
-  if (selectedText) {
-    speakSelectedText(selectedText);
+  if (!selectedText) {
+    return;
   }
-});
 
-loadVoices();
+  getSettings((settings) => {
+    sendTabMessage(tab, {
+      action: "PLAY_TEXT",
+      text: selectedText,
+      preferences: getPreferences(settings)
+    }).catch((error) => {
+      console.error("SelectSpeak context menu playback failed:", error);
+    });
+  });
+});

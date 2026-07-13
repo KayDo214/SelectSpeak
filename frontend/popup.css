@@ -1,4 +1,4 @@
-* {
+﻿* {
   box-sizing: border-box;
 }
 
@@ -14,7 +14,7 @@ body {
 .popup-container {
   background: #ffffff;
   border: 1px solid #d1d5db;
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
@@ -26,7 +26,7 @@ body {
 h1 {
   margin: 0;
   font-size: 24px;
-  letter-spacing: -0.3px;
+  letter-spacing: 0;
 }
 
 .subtitle {
@@ -58,7 +58,7 @@ h2 {
 }
 
 .info-line {
-  margin: 0 0 14px;
+  margin: 12px 0 0;
 }
 
 .label,
@@ -73,12 +73,14 @@ h2 {
 .value-pill,
 .speed-pill {
   display: inline-block;
+  max-width: 100%;
   padding: 4px 9px;
   border-radius: 999px;
   background: #eef2ff;
   color: #3730a3;
   font-size: 13px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .setting-group {
@@ -93,40 +95,30 @@ h2 {
   color: #374151;
 }
 
-select {
-  width: 100%;
-  padding: 9px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 9px;
-  background: #ffffff;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-select:hover {
-  border-color: #6366f1;
-}
-
-select:focus {
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
-}
-
+.selection-card,
 .preview-card {
   min-height: 132px;
   padding: 12px;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #f9fafb;
 }
 
+#selectionText,
 #selectedVoiceText,
 #previewText,
 #statusText {
   font-size: 13px;
   line-height: 1.45;
   color: #4b5563;
+}
+
+#selectionText {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
 }
 
 #selectedVoiceText {
@@ -144,7 +136,7 @@ select:focus {
 
 button {
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 9px 11px;
   font-size: 13px;
   font-weight: 700;
@@ -221,7 +213,4 @@ button:active {
 .full-width-button {
   width: 100%;
   margin-top: 8px;
-}
-.detect-button {
-  margin: 0 0 13px;
 }
