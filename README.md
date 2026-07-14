@@ -7,7 +7,7 @@ SelectSpeak is a browser extension backed by a Node.js/Express API. The extensio
 ```powershell
 cd backend
 npm install
-Copy-Item .env.example .env
+New-Item .env -ItemType File
 # Fill GEMINI_API_KEY and optional ElevenLabs fallback settings in .env
 npm run dev
 ```
