@@ -1,8 +1,10 @@
 import express from "express";
 import { generateSpeech } from "../controllers/tts.controller.js";
 
-const router = express.Router();
+export function createTtsRouter(handler = generateSpeech) {
+  const router = express.Router();
+  router.post("/", handler);
+  return router;
+}
 
-router.post("/", generateSpeech);
-
-export default router;
+export default createTtsRouter();
