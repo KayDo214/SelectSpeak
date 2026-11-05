@@ -1,41 +1,47 @@
 import { generateElevenLabsSpeech } from "./elevenlabs.tts.js";
 import { generateGeminiSpeech } from "./gemini.tts.js";
 
-const PROVIDERS = {
-  gemini: {
-    contentType: "audio/wav",
-    maxAttempts: 2,
-    generateSpeech({ text, language, voiceSelection }) {
-      return generateGeminiSpeech({
-        text,
-        language,
-        voiceName: voiceSelection.gemini.voiceName,
-      });
+function createProviders({ generateGeminiSpeechFn, generateElevenLabsSpeechFn }) {
+  return {
+    gemini: {
+      contentType: "audio/wav",
+      maxAttempts: 2,
+      generateSpeech({ text, language, voiceSelection }) {
+        return generateGeminiSpeechFn({
+          text,
+          language,
+          voiceName: voiceSelection.gemini.voiceName,
+        });
+      },
     },
-  },
-  elevenlabs: {
-    contentType: "audio/mpeg",
-    maxAttempts: 1,
-    generateSpeech({ text, language, voiceSelection }) {
-      return generateElevenLabsSpeech({
-        text,
-        voiceId: voiceSelection.elevenlabs.voiceId,
-        languageCode: language.code,
-      });
+    elevenlabs: {
+      contentType: "audio/mpeg",
+      maxAttempts: 1,
+      generateSpeech({ text, language, voiceSelection }) {
+        return generateElevenLabsSpeechFn({
+          text,
+          voiceId: voiceSelection.elevenlabs.voiceId,
+          languageCode: language.code,
+        });
+      },
     },
-  },
-};
-
-function normalizeProvider(provider, fallbackProvider = "gemini") {
-  return Object.hasOwn(PROVIDERS, provider) ? provider : fallbackProvider;
+  };
 }
 
-function getProviderOrder(requestedProvider) {
-  const primaryProvider = normalizeProvider(process.env.TTS_PROVIDER || "gemini");
-  const fallbackProvider = normalizeProvider(process.env.TTS_FALLBACK_PROVIDER || "elevenlabs", "elevenlabs");
+function normalizeProvider(providers, provider, fallbackProvider = "gemini") {
+  return Object.hasOwn(providers, provider) ? provider : fallbackProvider;
+}
+
+function getProviderOrder(providers, requestedProvider) {
+  const primaryProvider = normalizeProvider(providers, process.env.TTS_PROVIDER || "gemini");
+  const fallbackProvider = normalizeProvider(
+    providers,
+    process.env.TTS_FALLBACK_PROVIDER || "elevenlabs",
+    "elevenlabs"
+  );
 
   if (requestedProvider && requestedProvider !== "auto") {
-    return [normalizeProvider(requestedProvider)];
+    return [normalizeProvider(providers, requestedProvider)];
   }
 
   return [...new Set([primaryProvider, fallbackProvider])];
@@ -65,35 +71,44 @@ async function generateWithProvider(providerName, provider, params) {
   throw lastError;
 }
 
-export async function synthesizeSpeech({ text, language, voiceSelection }) {
-  const providerOrder = getProviderOrder(voiceSelection.provider);
-  let lastError = null;
+export function createTtsService({
+  generateGeminiSpeechFn = generateGeminiSpeech,
+  generateElevenLabsSpeechFn = generateElevenLabsSpeech,
+} = {}) {
+  const providers = createProviders({ generateGeminiSpeechFn, generateElevenLabsSpeechFn });
 
-  for (const providerName of providerOrder) {
-    const provider = PROVIDERS[providerName];
+  return async function synthesizeSpeech({ text, language, voiceSelection }) {
+    const providerOrder = getProviderOrder(providers, voiceSelection.provider);
+    let lastError = null;
 
-    try {
-      const audioBuffer = await generateWithProvider(providerName, provider, {
-        text,
-        language,
-        voiceSelection,
-      });
+    for (const providerName of providerOrder) {
+      const provider = providers[providerName];
 
-      return {
-        audioBuffer,
-        contentType: provider.contentType,
-        provider: providerName,
-      };
-    } catch (error) {
-      lastError = error;
+      try {
+        const audioBuffer = await generateWithProvider(providerName, provider, {
+          text,
+          language,
+          voiceSelection,
+        });
 
-      if (providerName === providerOrder.at(-1) || !canRetryProvider(error)) {
-        throw error;
+        return {
+          audioBuffer,
+          contentType: provider.contentType,
+          provider: providerName,
+        };
+      } catch (error) {
+        lastError = error;
+
+        if (providerName === providerOrder.at(-1) || !canRetryProvider(error)) {
+          throw error;
+        }
+
+        console.warn(`TTS provider ${providerName} failed; trying fallback provider.`, error);
       }
-
-      console.warn(`TTS provider ${providerName} failed; trying fallback provider.`, error);
     }
-  }
 
-  throw lastError || new Error("No TTS providers are configured.");
+    throw lastError || new Error("No TTS providers are configured.");
+  };
 }
+
+export const synthesizeSpeech = createTtsService();

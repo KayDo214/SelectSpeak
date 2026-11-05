@@ -1,8 +1,10 @@
 import express from "express";
 import { listVoices } from "../controllers/voices.controller.js";
 
-const router = express.Router();
+export function createVoicesRouter(handler = listVoices) {
+  const router = express.Router();
+  router.get("/", handler);
+  return router;
+}
 
-router.get("/", listVoices);
-
-export default router;
+export default createVoicesRouter();

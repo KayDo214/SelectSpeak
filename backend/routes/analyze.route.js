@@ -1,8 +1,10 @@
 import express from "express";
 import { analyzeText } from "../controllers/analyze.controller.js";
 
-const router = express.Router();
+export function createAnalyzeRouter(handler = analyzeText) {
+  const router = express.Router();
+  router.post("/", handler);
+  return router;
+}
 
-router.post("/", analyzeText);
-
-export default router;
+export default createAnalyzeRouter();
